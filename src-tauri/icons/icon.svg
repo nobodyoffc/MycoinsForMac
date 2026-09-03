@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    MyCoins app icon — vector rebuild of the Android launcher icon
+    (android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png, 192x192).
+    That PNG was the largest artwork in the RN project, so the geometry and
+    colours were measured off it and re-expressed here to stay crisp at 1024.
+
+    Authored in the original 192x192 coordinate space; the transform below
+    scales it into the 824x824 macOS icon safe area, centred in a 1024 canvas,
+    so it sits at the same visual weight as native Dock icons.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#372E7D"/>
+      <stop offset="1" stop-color="#1E1B5E"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EDAF2F"/>
+      <stop offset="1" stop-color="#EAAA29"/>
+    </linearGradient>
+    <radialGradient id="disc" cx="96" cy="90" r="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD45E"/>
+      <stop offset="0.55" stop-color="#FBCB50"/>
+      <stop offset="1" stop-color="#F0B231"/>
+    </radialGradient>
+  </defs>
+
+  <g transform="translate(100,100) scale(4.291667)">
+    <rect x="0" y="0" width="192" height="192" rx="39.9" ry="39.9" fill="url(#bg)"/>
+
+    <!-- coin: dark rim, gold band, bright inner ring, graded face -->
+    <circle cx="96" cy="96" r="61.5" fill="#B37911"/>
+    <circle cx="96" cy="96" r="58.5" fill="url(#ring)"/>
+    <circle cx="96" cy="96" r="53.0" fill="#FAD47E"/>
+    <circle cx="96" cy="96" r="50.0" fill="url(#disc)"/>
+
+    <!--
+      "M" — outline recovered by least-squares fitting the four diagonal
+      edges across rows 74..102 of the source, then mirrored about x=96.5.
+      Stems x=72..81 and x=112..121; cap y=64, baseline y=115.
+    -->
+    <path fill="#1E1B5E" d="
+      M 72,64
+      L 86.84,64
+      L 96.5,105.67
+      L 106.16,64
+      L 121,64
+      L 121,115
+      L 112,115
+      L 112,68.18
+      L 101.15,115
+      L 91.85,115
+      L 81,68.18
+      L 81,115
+      L 72,115
+      Z"/>
+  </g>
+</svg>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>MyCoins uses the camera only to scan QR codes you point at it — addresses, keys, and ciphers. Nothing is recorded or sent anywhere.</string>
+</dict>
+</plist>

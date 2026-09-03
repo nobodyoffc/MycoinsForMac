@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {useAccountStore} from '../store/account-store';
+import {ScanField} from '../components/ScanField';
 
 type ImportMode = 'random' | 'hex' | 'wif' | 'secret' | 'pubkey' | 'cipher';
 
@@ -32,6 +33,17 @@ function inputPlaceholder(mode: ImportMode): string {
     case 'cipher': return 'Paste the cipher JSON from backup';
     case 'pubkey': return '33 or 65 byte compressed/uncompressed pubkey hex';
     default: return '';
+  }
+}
+
+function scanHint(mode: ImportMode): string {
+  switch (mode) {
+    case 'cipher':
+      return 'Scan the key cipher QR from a backup — the password is still required below.';
+    case 'pubkey':
+      return 'Scan a public key QR to watch an address without its private key.';
+    default:
+      return 'Scan the QR code holding this key. Only scan codes you trust.';
   }
 }
 
@@ -135,16 +147,25 @@ export function AddKeyScreen() {
                 placeholder={inputPlaceholder(mode)}
               />
             ) : (
-              <textarea
-                className="mono"
-                value={inputValue}
-                onChange={e => setInputValue(e.target.value)}
-                placeholder={inputPlaceholder(mode)}
-                rows={mode === 'cipher' ? 6 : 3}
-                spellCheck={false}
-                autoCapitalize="off"
-                autoCorrect="off"
-              />
+              <ScanField
+                variant="corner"
+                title={`Scan ${inputLabel(mode)}`}
+                hint={scanHint(mode)}
+                onScan={text => {
+                  setInputValue(text);
+                  setError('');
+                }}>
+                <textarea
+                  className="mono"
+                  value={inputValue}
+                  onChange={e => setInputValue(e.target.value)}
+                  placeholder={inputPlaceholder(mode)}
+                  rows={mode === 'cipher' ? 6 : 3}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                />
+              </ScanField>
             )}
           </div>
 

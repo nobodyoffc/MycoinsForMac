@@ -11,6 +11,7 @@ import {BlockCypherAPI} from '../api/providers/blockcypher';
 import {BlockchairAPI} from '../api/providers/blockchair';
 import {EthereumAPI} from '../api/providers/ethereum';
 import {setProvider, reinitializeFchProviders} from '../api/api-registry';
+import {APP_VERSION_LABEL} from '../utils/version';
 
 interface Preset {
   key: string;
@@ -389,7 +390,7 @@ export function SettingsScreen() {
         <div className="section-title" style={{marginTop: 0}}>About</div>
         <div className="info-row">
           <span className="label">App</span>
-          <span className="value">MyCoins v0.1.1</span>
+          <span className="value">MyCoins {APP_VERSION_LABEL}</span>
         </div>
       </div>
 

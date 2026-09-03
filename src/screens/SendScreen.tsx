@@ -8,6 +8,8 @@ import {useWalletStore} from '../store/wallet-store';
 import {verifyPassword} from '../account/account';
 import {formatCoinBalance, coinColor} from '../utils/format';
 import {parseCoin} from '../utils/coin-param';
+import {parsePaymentTarget} from '../utils/scan-parse';
+import {ScanField} from '../components/ScanField';
 
 export function SendScreen() {
   const navigate = useNavigate();
@@ -42,6 +44,23 @@ export function SendScreen() {
   const config = COINS[coin];
   const color = coinColor(coin);
   const balance = balances[coin];
+
+  // FCH OP_RETURN allows 1..4092 bytes. The limit is in UTF-8 bytes, not
+  // characters, so multibyte text (e.g. CJK) counts more than one byte each.
+  // Reject input that would exceed it rather than truncating mid-character.
+  const setMemoWithinLimit = (next: string) => {
+    if (new TextEncoder().encode(next).length <= 4092) setMemo(next);
+  };
+
+  const handleScanRecipient = (text: string) => {
+    const parsed = parsePaymentTarget(text);
+    setRecipient(parsed.address);
+    if (parsed.amount) setAmount(parsed.amount);
+    if (parsed.memo && coin === CoinType.FCH) setMemoWithinLimit(parsed.memo);
+    setError('');
+  };
+
+  const handleScanMemo = (text: string) => setMemoWithinLimit(text);
 
   const openPasswordModal = () => {
     setError('');
@@ -138,16 +157,22 @@ export function SendScreen() {
 
       <div className="form-group">
         <label htmlFor="to">Recipient Address</label>
-        <input
-          id="to"
-          className="mono"
-          value={recipient}
-          onChange={e => setRecipient(e.target.value)}
-          placeholder={`Enter ${config.ticker} address`}
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-        />
+        <ScanField
+          variant="inline"
+          title={`Scan ${config.ticker} Address`}
+          hint="Point the camera at the recipient's QR code, or scan an image of one."
+          onScan={handleScanRecipient}>
+          <input
+            id="to"
+            className="mono"
+            value={recipient}
+            onChange={e => setRecipient(e.target.value)}
+            placeholder={`Enter ${config.ticker} address`}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+        </ScanField>
       </div>
 
       <div className="form-group">
@@ -165,22 +190,19 @@ export function SendScreen() {
       {coin === CoinType.FCH && (
         <div className="form-group">
           <label htmlFor="memo">Note (OP_RETURN)</label>
-          <input
-            id="memo"
-            type="text"
-            value={memo}
-            onChange={e => {
-              // FCH OP_RETURN allows 1..4092 bytes. The limit is in UTF-8
-              // bytes, not characters, so multibyte text (e.g. CJK) counts
-              // more than one byte each. Reject input that would exceed it
-              // rather than silently truncating mid-character.
-              const next = e.target.value;
-              if (new TextEncoder().encode(next).length <= 4092) {
-                setMemo(next);
-              }
-            }}
-            placeholder="Optional message to record on-chain"
-          />
+          <ScanField
+            variant="corner"
+            title="Scan Note (OP_RETURN)"
+            hint="Scan a QR code holding the text to record on-chain."
+            onScan={handleScanMemo}>
+            <textarea
+              id="memo"
+              rows={3}
+              value={memo}
+              onChange={e => setMemoWithinLimit(e.target.value)}
+              placeholder="Optional message to record on-chain"
+            />
+          </ScanField>
           <small style={{color: 'var(--text-secondary)'}}>
             {new TextEncoder().encode(memo).length} / 4092 bytes
           </small>

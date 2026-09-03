@@ -5,6 +5,7 @@ import {CoinsIcon, SwapIcon, SettingsIcon} from '../components/TabIcons';
 import {FloatingAvatar} from '../components/FloatingAvatar';
 import {ApiPaymentHandler} from '../components/ApiPaymentHandler';
 import {BackupReminder} from '../components/BackupReminder';
+import {APP_VERSION_LABEL} from '../utils/version';
 
 // /keys is reached from the FID badge rather than the sidebar, so it keeps the
 // back button.
@@ -55,6 +56,7 @@ export function MainShell() {
             </NavLink>
           ))}
         </nav>
+        <div className="sidebar-bottom">MyCoins {APP_VERSION_LABEL}</div>
       </aside>
       <main className="main-content">
         <div className="main-titlebar" />
