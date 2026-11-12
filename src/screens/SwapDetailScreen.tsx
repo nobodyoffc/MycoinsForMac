@@ -188,6 +188,7 @@ export function SwapDetailScreen() {
         privateKey: activeKey.privateKey,
       });
       const rawAmount = toRaw(inputAmount, sendDecimals);
+      const sendBalance = useWalletStore.getState().balances[sendCoin];
       addPendingTx({
         txid: result.txid,
         coin: sendCoin,
@@ -196,6 +197,8 @@ export function SwapDetailScreen() {
         amount: String(rawAmount),
         fee: '0',
         timestamp: Date.now(),
+        balanceAtSend:
+          sendBalance?.status === 'ok' ? sendBalance.balanceRaw : undefined,
       });
       window.alert(
         `Swap Submitted\n\nSent ${inputAmount} ${sendTick} to swap pool.\nExpected: ~${outputAmount} ${receiveTick}\nTXID: ${result.txid}`,

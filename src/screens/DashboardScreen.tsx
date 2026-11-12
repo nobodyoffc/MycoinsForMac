@@ -4,7 +4,6 @@ import {useAccountStore} from '../store/account-store';
 import {useWalletStore} from '../store/wallet-store';
 import {CoinBalanceCard} from '../components/CoinBalanceCard';
 import {CoinType} from '../coins/types';
-import {formatCoinBalance} from '../utils/format';
 
 const COIN_ORDER: CoinType[] = [
   CoinType.BTC,
@@ -24,7 +23,9 @@ export function DashboardScreen() {
   const isLoading = useWalletStore(s => s.isLoading);
   const initializeForKey = useWalletStore(s => s.initializeForKey);
   const refreshBalances = useWalletStore(s => s.refreshBalances);
-  const getDisplayBalance = useWalletStore(s => s.getDisplayBalance);
+  const getDisplayBalanceText = useWalletStore(s => s.getDisplayBalanceText);
+  // Subscribed so the rows re-render when a pending send is added or cleared.
+  useWalletStore(s => s.pendingTxs);
 
   const activeKey = keys.find(k => k.id === activeKeyId);
 
@@ -58,12 +59,11 @@ export function DashboardScreen() {
 
       {COIN_ORDER.map(coin => {
         const b = balances[coin];
-        const displayRaw = getDisplayBalance(coin);
         return (
           <CoinBalanceCard
             key={coin}
             coin={coin}
-            balance={formatCoinBalance(displayRaw, coin)}
+            balance={getDisplayBalanceText(coin)}
             address={b.address}
             onClick={() => navigate(`/coins/${coin}`)}
           />

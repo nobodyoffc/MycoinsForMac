@@ -6,6 +6,7 @@
 
 import {CoinAPI, APIConfig} from '../types';
 import {CoinType, UTXO, Transaction} from '../../coins/types';
+import {fetchWithTimeout} from '../http';
 
 const CHAIN_MAP: Partial<Record<CoinType, string>> = {
   [CoinType.BTC]: 'btc/main',
@@ -17,12 +18,14 @@ export class BlockCypherAPI implements CoinAPI {
   private chain: string;
   private baseUrl: string;
   private token?: string;
+  private timeout: number;
 
   constructor(coin: CoinType, config?: Partial<APIConfig>) {
     this.coin = coin;
     this.chain = CHAIN_MAP[coin] || 'btc/main';
     this.baseUrl = config?.baseUrl || 'https://api.blockcypher.com/v1';
     this.token = config?.apiKey || undefined;
+    this.timeout = config?.timeout || 15000;
   }
 
   // Append the BlockCypher API token, if configured, to raise the request
@@ -35,7 +38,7 @@ export class BlockCypherAPI implements CoinAPI {
 
   private async fetchJson(path: string): Promise<any> {
     const url = this.withToken(`${this.baseUrl}/${this.chain}${path}`);
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url, {}, this.timeout);
     if (!resp.ok) {
       if (resp.status === 429) {
         throw new Error(
@@ -77,11 +80,15 @@ export class BlockCypherAPI implements CoinAPI {
   }
 
   async broadcastTransaction(rawHex: string): Promise<string> {
-    const resp = await fetch(this.withToken(`${this.baseUrl}/${this.chain}/txs/push`), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({tx: rawHex}),
-    });
+    const resp = await fetchWithTimeout(
+      this.withToken(`${this.baseUrl}/${this.chain}/txs/push`),
+      {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tx: rawHex}),
+      },
+      this.timeout,
+    );
     const json = await resp.json();
     if (json.tx?.hash) {
       return json.tx.hash;
@@ -96,10 +103,21 @@ export class BlockCypherAPI implements CoinAPI {
     page: number = 0,
   ): Promise<Transaction[]> {
     const json = await this.fetchJson(`/addrs/${address}?limit=20`);
-    if (!json.txrefs) {
-      return [];
-    }
-    return json.txrefs.map((ref: any) => ({
+    // Merge confirmed (txrefs) and unconfirmed (unconfirmed_txrefs) refs; an
+    // address whose only activity is still in the mempool has no `txrefs`.
+    const allRefs: any[] = [
+      ...(json.unconfirmed_txrefs || []),
+      ...(json.txrefs || []),
+    ];
+    // A tx_hash can appear twice (once as input, once as output of the same
+    // tx); keep the first ref seen per txid so each tx shows once.
+    const seen = new Set<string>();
+    const uniqueRefs = allRefs.filter((ref: any) => {
+      if (seen.has(ref.tx_hash)) return false;
+      seen.add(ref.tx_hash);
+      return true;
+    });
+    return uniqueRefs.map((ref: any) => ({
       txid: ref.tx_hash,
       coin: this.coin,
       from: '',

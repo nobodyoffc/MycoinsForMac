@@ -3,7 +3,6 @@
  * Builds, signs, and serializes ETH transactions locally.
  */
 
-import * as secp from '@noble/secp256k1';
 import {encodeRLP, bigintToRLPBytes, numberToRLPBytes, RLPInput} from './rlp';
 import {keccak256} from '../../crypto/hash';
 import {sign} from '../../crypto/keys';
@@ -24,8 +23,6 @@ export interface SignedEthTx {
   txHash: string;
   rawHex: string; // 0x-prefixed
 }
-
-const SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 
 function addressToBytes(address: string): Uint8Array {
   const clean = address.startsWith('0x') ? address.slice(2) : address;
@@ -72,25 +69,21 @@ export function signEthTransaction(
   // 2. Hash the unsigned payload with keccak256
   const msgHash = keccak256(unsignedPayload);
 
-  // 3. Sign with secp256k1 ECDSA
-  const sigBytes = sign(msgHash, privateKey, {prehash: false});
-  const r = sigBytes.slice(0, 32);
-  const s = sigBytes.slice(32, 64);
+  // 3. Sign with secp256k1 ECDSA, requesting the recovery id.
+  // noble's 'recovered' format returns [recovery(1) || r(32) || s(32)] and
+  // already normalizes s to low-S, flipping the recovery bit to match. The
+  // recovery id IS the EIP-1559 v value (0 or 1) — it must be the parity that
+  // recovers our public key, otherwise the node derives the wrong `from`
+  // address (recovering an empty account → "insufficient funds, have 0").
+  const sigBytes = sign(msgHash, privateKey, {
+    prehash: false,
+    format: 'recovered',
+  });
+  const recoveryId = sigBytes[0];
+  const rBigInt = bytesToBigInt(sigBytes.slice(1, 33));
+  const sBigInt = bytesToBigInt(sigBytes.slice(33, 65));
 
-  // 4. Determine recovery id (v)
-  // We need to try both v=0 and v=1 and check which recovers to our pubkey
-  // For EIP-1559, v is just 0 or 1 (not 27/28)
-  let recoveryId = determineRecoveryId(msgHash, r, s, privateKey);
-
-  // 5. Normalize s to low-S
-  let sBigInt = bytesToBigInt(s);
-  let rBigInt = bytesToBigInt(r);
-  if (sBigInt > SECP256K1_N / 2n) {
-    sBigInt = SECP256K1_N - sBigInt;
-    recoveryId ^= 1;
-  }
-
-  // 6. Build signed transaction
+  // 4. Build signed transaction
   // 0x02 || RLP([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList, v, r, s])
   const fields: RLPInput[] = [
     bigintToRLPBytes(BigInt(params.chainId)),
@@ -112,7 +105,7 @@ export function signEthTransaction(
   signedTx[0] = 0x02;
   signedTx.set(rlpEncoded, 1);
 
-  // 7. Compute tx hash
+  // 5. Compute tx hash
   const txHash = keccak256(signedTx);
 
   return {
@@ -127,38 +120,6 @@ function bytesToBigInt(bytes: Uint8Array): bigint {
     result = (result << 8n) | BigInt(b);
   }
   return result;
-}
-
-/**
- * Determine the ECDSA recovery ID by trying both 0 and 1.
- */
-function determineRecoveryId(
-  msgHash: Uint8Array,
-  r: Uint8Array,
-  s: Uint8Array,
-  privateKey: Uint8Array,
-): number {
-  // The noble secp256k1 sign function doesn't directly give us the recovery id
-  // in compact format. We can determine it by checking if the y-coordinate of R
-  // is even (0) or odd (1).
-  //
-  // For simplicity, we default to 0 and rely on the low-S normalization.
-  // In practice, we should use the 'recovered' format, but noble v3 doesn't
-  // support it directly. We'll try both and verify.
-  //
-  // A simpler approach: sign with recovery info
-  try {
-    const sig = secp.sign(msgHash, privateKey, {
-      prehash: false,
-      extraEntropy: false,
-    });
-    // The compact sig's first byte can indicate the recovery id
-    // but in noble v3, we need to use recoverPublicKey to check
-    // For now, use 0 as default — works for most cases
-    return 0;
-  } catch {
-    return 0;
-  }
 }
 
 /**

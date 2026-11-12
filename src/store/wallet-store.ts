@@ -3,11 +3,20 @@ import {CoinType, Transaction} from '../coins/types';
 import {fetchAllBalances, getProvider} from '../api/api-registry';
 import {formatCoinBalance} from '../utils/format';
 
+// 'unfetched' = no fetch has returned yet this session (show '-')
+// 'ok'        = last fetch succeeded (show the number, even if it's a real 0)
+// 'error'     = last fetch failed (show cached number + '!', or bare '!')
+type BalanceStatus = 'unfetched' | 'ok' | 'error';
+
 interface CoinBalance {
   coin: CoinType;
   balance: string;
   balanceRaw: string;
   address: string;
+  status: BalanceStatus;
+  // True once any fetch has succeeded this session. Lets an 'error' status
+  // distinguish "show stale cached value + !" from "show bare !".
+  hasCachedValue: boolean;
 }
 
 interface PendingTx {
@@ -18,6 +27,9 @@ interface PendingTx {
   amount: string; // raw amount in smallest unit
   fee: string;
   timestamp: number;
+  // API balance (raw) at the moment this TX was broadcast. Used to detect when
+  // the API already reflects the spend so we don't subtract it a second time.
+  balanceAtSend?: string;
 }
 
 const PENDING_TX_EXPIRY = 60 * 60 * 1000; // 1 hour
@@ -40,6 +52,7 @@ interface WalletState {
   fetchTransactions: (coin: CoinType) => Promise<void>;
   addPendingTx: (tx: PendingTx) => void;
   getDisplayBalance: (coin: CoinType) => string;
+  getDisplayBalanceText: (coin: CoinType) => string;
   getMergedTransactions: (coin: CoinType) => Transaction[];
 }
 
@@ -48,6 +61,8 @@ const emptyBalance = (coin: CoinType, address: string = ''): CoinBalance => ({
   balance: '0',
   balanceRaw: '0',
   address,
+  status: 'unfetched',
+  hasCachedValue: false,
 });
 
 const initialBalances: Record<CoinType, CoinBalance> = {
@@ -81,7 +96,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set(state => ({
       balances: {
         ...state.balances,
-        [coin]: {coin, balance, balanceRaw, address},
+        [coin]: {coin, balance, balanceRaw, address, status: 'ok', hasCachedValue: true},
       },
     }));
   },
@@ -136,18 +151,33 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({isLoading: true});
     try {
       const rawBalances = await fetchAllBalances(addresses);
+      const prev = get().balances;
+      // The active key may have changed while the request was in flight; a
+      // result for the old key's addresses must not overwrite the new key's.
+      if (Object.values(CoinType).some(c => prev[c].address !== addresses[c])) {
+        return;
+      }
       const updated: Record<CoinType, CoinBalance> = {} as any;
       for (const coin of Object.values(CoinType)) {
-        updated[coin] = {
-          coin,
-          balanceRaw: rawBalances[coin] || '0',
-          balance: formatCoinBalance(rawBalances[coin] || '0', coin),
-          address: addresses[coin],
-        };
+        const raw = rawBalances[coin];
+        if (raw === null) {
+          // Fetch failed: keep whatever we had (cached value or empty) and
+          // flag the error so the UI can show '!' instead of a wrong 0.
+          updated[coin] = {...prev[coin], status: 'error'};
+        } else {
+          updated[coin] = {
+            coin,
+            balanceRaw: raw,
+            balance: formatCoinBalance(raw, coin),
+            address: addresses[coin],
+            status: 'ok',
+            hasCachedValue: true,
+          };
+        }
       }
       set({balances: updated, lastRefresh: Date.now()});
 
-      // Clean up pending TXs: remove confirmed and expired ones
+      // Clean up pending TXs: remove confirmed, reflected, and expired ones
       const {pendingTxs, transactions} = get();
       const now = Date.now();
       const remaining = pendingTxs.filter(ptx => {
@@ -156,6 +186,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         // Remove if confirmed (txid appears in API history)
         const confirmedTxs = transactions[ptx.coin] || [];
         if (confirmedTxs.some(t => t.txid === ptx.txid)) return false;
+        // Remove if the API balance already reflects this spend. Once a fresh
+        // balance has dropped below the snapshot taken at send time, the spend
+        // is already accounted for and subtracting it again would double-count.
+        if (
+          ptx.balanceAtSend !== undefined &&
+          updated[ptx.coin]?.status === 'ok'
+        ) {
+          const newRaw = BigInt(updated[ptx.coin].balanceRaw || '0');
+          if (newRaw < BigInt(ptx.balanceAtSend)) return false;
+        }
         return true;
       });
       if (remaining.length !== pendingTxs.length) {
@@ -207,6 +247,19 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       .reduce((sum, ptx) => sum + BigInt(ptx.amount) + BigInt(ptx.fee || '0'), 0n);
     const display = apiBalance - pendingOut;
     return (display > 0n ? display : 0n).toString();
+  },
+
+  // User-facing balance string with fetch-state glyphs:
+  //   '-'              before the first fetch returns (nothing known yet)
+  //   '<number> !'     last fetch failed but we have a cached value (stale)
+  //   '!'              last fetch failed and we never had a value
+  //   '<number>'       last fetch succeeded (a real 0 shows as the number)
+  getDisplayBalanceText: (coin: CoinType): string => {
+    const b = get().balances[coin];
+    if (!b || b.status === 'unfetched') return '-';
+    if (b.status === 'error' && !b.hasCachedValue) return '!';
+    const formatted = formatCoinBalance(get().getDisplayBalance(coin), coin);
+    return b.status === 'error' ? `${formatted} !` : formatted;
   },
 
   // Merge confirmed TXs + pending TXs, no duplicates

@@ -40,7 +40,7 @@ const API_GROUPS: ApiGroup[] = [
     color: coinColor(CoinType.FCH),
     desc: 'Freecash API server with encrypted requests.',
     presets: [
-      {key: 'fch_default', label: 'Freecash APIP', url: 'http://localhost:8081/APIP', provider: 'fch', showApiKey: false, default: true},
+      {key: 'fch_default', label: 'Freecash APIP', url: 'https://freecash.info/APIP', provider: 'fch', showApiKey: false, default: true},
       {key: 'custom', label: 'Custom URL…', url: '', provider: 'fch', showApiKey: false},
     ],
   },

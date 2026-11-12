@@ -14,7 +14,7 @@ export function CoinDetailScreen() {
   const activeKey = useAccountStore(s => s.keys.find(k => k.id === s.activeKeyId));
   const balance = useWalletStore(s => (coin ? s.balances[coin] : null));
   const fetchTransactions = useWalletStore(s => s.fetchTransactions);
-  const getDisplayBalance = useWalletStore(s => s.getDisplayBalance);
+  const getDisplayBalanceText = useWalletStore(s => s.getDisplayBalanceText);
   const getMergedTransactions = useWalletStore(s => s.getMergedTransactions);
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function CoinDetailScreen() {
 
   const config = COINS[coin];
   const color = coinColor(coin);
-  const displayRaw = getDisplayBalance(coin);
+  const balanceText = getDisplayBalanceText(coin);
   const txs = getMergedTransactions(coin);
 
   return (
@@ -40,7 +40,7 @@ export function CoinDetailScreen() {
         </div>
         <div className="coin-hero-name">{config.name}</div>
         <div className="coin-hero-balance">
-          {formatCoinBalance(displayRaw, coin)} {config.ticker}
+          {balanceText} {config.ticker}
         </div>
         <div className="coin-hero-address">{balance.address}</div>
       </div>

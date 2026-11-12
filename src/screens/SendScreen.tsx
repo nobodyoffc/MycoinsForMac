@@ -119,6 +119,7 @@ export function SendScreen() {
         amount: rawAmount,
         fee: '0',
         timestamp: Date.now(),
+        balanceAtSend: balance.status === 'ok' ? balance.balanceRaw : undefined,
       });
 
       setSendResult({

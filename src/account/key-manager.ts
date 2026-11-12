@@ -28,7 +28,11 @@ export class KeyManager {
     this.kdfParams = kdfParams;
     const result = await this.keystoreManager.load(account.id, account.symkey);
     this.keys = result ? result.keys : [];
-    if (this.keys.length > 0 && !this.activeKeyId) {
+    // Restore the key last used (if it still exists), otherwise fall back to the first.
+    const savedActiveId = result?.activeKeyId;
+    if (savedActiveId && this.keys.some(k => k.id === savedActiveId)) {
+      this.activeKeyId = savedActiveId;
+    } else if (this.keys.length > 0 && !this.activeKeyId) {
       this.activeKeyId = this.keys[0].id;
     }
   }
@@ -66,6 +70,7 @@ export class KeyManager {
       this.keys,
       this.currentAccount.symkey,
       this.kdfParams,
+      this.activeKeyId,
     );
   }
 
@@ -211,12 +216,14 @@ export class KeyManager {
     return this.keys.find(k => k.id === this.activeKeyId) || null;
   }
 
-  setActiveKey(fchAddress: string): void {
+  async setActiveKey(fchAddress: string): Promise<void> {
     const key = this.keys.find(k => k.id === fchAddress);
     if (!key) {
       throw new Error(`Key not found: ${fchAddress}`);
     }
     this.activeKeyId = fchAddress;
+    // Persist so the next relaunch restores this key.
+    await this.saveKeys();
   }
 
   clear(): void {

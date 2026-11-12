@@ -32,7 +32,7 @@ import {AddKeyScreen} from './screens/AddKeyScreen';
 import {SwapListScreen} from './screens/SwapListScreen';
 import {SwapDetailScreen} from './screens/SwapDetailScreen';
 
-const DEFAULT_FCH_API = 'http://localhost:8081/APIP';
+const DEFAULT_FCH_API = 'https://freecash.info/APIP';
 
 function RequireAuth({children}: {children: JSX.Element}) {
   const isLoggedIn = useAccountStore(s => s.isLoggedIn);
@@ -107,12 +107,29 @@ export default function App() {
       // both preset and custom URLs). customApiUrl is only a fallback for older
       // saved configs; reading it first would ignore a newer preset selection.
       const fchEndpoint = settings.apiEndpoints[CoinType.FCH];
+      const bchEndpoint = settings.apiEndpoints[CoinType.BCH];
+      const ethEndpoint = settings.apiEndpoints[CoinType.ETH];
+      // apiProviderTypes is keyed by the lowercase settings group key
+      // ('fch'/'btc'/'doge'/'bch'), not the CoinType value. The built-in FCH
+      // preset always resolves to the current default URL, so a URL saved
+      // under it by an older build (http://localhost:8081) doesn't stick.
+      const fchBaseUrl =
+        settings.apiProviderTypes.fch === 'fch_default'
+          ? DEFAULT_FCH_API
+          : fchEndpoint?.baseUrl || settings.customApiUrl || DEFAULT_FCH_API;
       initializeProviders({
-        fchBaseUrl: fchEndpoint?.baseUrl || settings.customApiUrl || DEFAULT_FCH_API,
+        fchBaseUrl,
+        btcProviderType: settings.apiProviderTypes.btc,
         btcBaseUrl: btcEndpoint?.baseUrl,
         btcApiKey: btcEndpoint?.apiKey,
+        dogeProviderType: settings.apiProviderTypes.doge,
         dogeBaseUrl: dogeEndpoint?.baseUrl,
         dogeApiKey: dogeEndpoint?.apiKey,
+        bchProviderType: settings.apiProviderTypes.bch,
+        bchBaseUrl: bchEndpoint?.baseUrl,
+        bchApiKey: bchEndpoint?.apiKey,
+        ethRpcUrl: ethEndpoint?.baseUrl,
+        etherscanApiKey: ethEndpoint?.apiKey,
       });
       await loadAvailableAccounts();
       setBooted(true);

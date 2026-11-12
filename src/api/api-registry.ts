@@ -18,18 +18,41 @@ const registry: ProviderRegistry = {
   fchLegacyApi: null,
 };
 
+// Build a UTXO-coin provider from the saved preset type. 'blockchair' and
+// 'blockcypher' map to their classes; 'custom' (or unknown/undefined) falls
+// back to the coin's default class. The matching baseUrl is supplied by the caller.
+function buildUtxoProvider(
+  coin: CoinType,
+  providerType: string | undefined,
+  baseUrl: string | undefined,
+  apiKey: string | undefined,
+  fallback: 'blockcypher' | 'blockchair',
+): CoinAPI {
+  const type =
+    providerType === 'blockchair' || providerType === 'blockcypher'
+      ? providerType
+      : fallback;
+  return type === 'blockchair'
+    ? new BlockchairAPI(coin, {baseUrl, apiKey})
+    : new BlockCypherAPI(coin, {baseUrl, apiKey});
+}
+
 export function initializeProviders(config?: {
   fchBaseUrl?: string;
   fchClientPrivkeyHex?: string;
+  btcProviderType?: string;
   btcBaseUrl?: string;
   btcApiKey?: string;
+  dogeProviderType?: string;
   dogeBaseUrl?: string;
   dogeApiKey?: string;
-  blockchairApiKey?: string;
+  bchProviderType?: string;
+  bchBaseUrl?: string;
+  bchApiKey?: string;
   ethRpcUrl?: string;
   etherscanApiKey?: string;
 }): void {
-  const fchBaseUrl = config?.fchBaseUrl || 'http://localhost:8081/APIP';
+  const fchBaseUrl = config?.fchBaseUrl || 'https://freecash.info/APIP';
 
   // FCH via common API (encrypted request + response)
   const fchCommonApi = new CommonAPI(fchBaseUrl, CoinType.FCH);
@@ -51,20 +74,19 @@ export function initializeProviders(config?: {
   // Use common API for FCH (falls back to legacy GET if keys not set)
   registry.providers.set(CoinType.FCH, fchCommonApi);
 
-  // BTC, DOGE via BlockCypher (free, no key needed)
+  // BTC, DOGE, BCH — honor the user's saved provider choice; otherwise use the
+  // coin's default class (BlockCypher for BTC/DOGE, Blockchair for BCH).
   registry.providers.set(
     CoinType.BTC,
-    new BlockCypherAPI(CoinType.BTC, {baseUrl: config?.btcBaseUrl, apiKey: config?.btcApiKey}),
+    buildUtxoProvider(CoinType.BTC, config?.btcProviderType, config?.btcBaseUrl, config?.btcApiKey, 'blockcypher'),
   );
   registry.providers.set(
     CoinType.DOGE,
-    new BlockCypherAPI(CoinType.DOGE, {baseUrl: config?.dogeBaseUrl, apiKey: config?.dogeApiKey}),
+    buildUtxoProvider(CoinType.DOGE, config?.dogeProviderType, config?.dogeBaseUrl, config?.dogeApiKey, 'blockcypher'),
   );
-
-  // BCH via Blockchair
   registry.providers.set(
     CoinType.BCH,
-    new BlockchairAPI(CoinType.BCH, {apiKey: config?.blockchairApiKey}),
+    buildUtxoProvider(CoinType.BCH, config?.bchProviderType, config?.bchBaseUrl, config?.bchApiKey, 'blockchair'),
   );
 
   // ETH, USDT, USDC via Ethereum RPC + Etherscan
@@ -121,10 +143,12 @@ export async function reinitializeFchProviders(
   if (!clientPrivkeyHex) return;
 
   try {
+    // Set the legacy client key first: it's local and must not depend on the
+    // network calls below succeeding. Both APIs retry getService lazily.
+    fchLegacyApi.setClientKey(clientPrivkeyHex, fid || '');
     // Fetch the new server's pubkey and wire up encrypted requests on both APIs.
     await fchCommonApi.init(clientPrivkeyHex);
     await fchLegacyApi.init();
-    fchLegacyApi.setClientKey(clientPrivkeyHex, fid || '');
   } catch (e: any) {
     console.warn('[reinitializeFchProviders] FCH API not ready:', e?.message);
     // Providers still point at the new URL; keys can be set on next login.
@@ -135,10 +159,13 @@ export function setProvider(coin: CoinType, provider: CoinAPI): void {
   registry.providers.set(coin, provider);
 }
 
+// Returns the raw balance per coin, or `null` when fetching that coin's
+// balance from the API failed. `null` is distinct from '0': callers must
+// surface a failed fetch (e.g. show '!') rather than a misleading zero.
 export async function fetchAllBalances(
   addresses: Record<CoinType, string>,
-): Promise<Record<CoinType, string>> {
-  const results: Partial<Record<CoinType, string>> = {};
+): Promise<Record<CoinType, string | null>> {
+  const results: Partial<Record<CoinType, string | null>> = {};
   const errors: string[] = [];
 
   const coins = Object.values(CoinType);
@@ -151,7 +178,8 @@ export async function fetchAllBalances(
         results[coin] = '0';
       }
     } catch (err: any) {
-      results[coin] = '0';
+      // Signal failure with null so the UI can show '!' instead of a wrong 0.
+      results[coin] = null;
       errors.push(`${coin}: ${err.message}`);
     }
   });
@@ -159,9 +187,9 @@ export async function fetchAllBalances(
   await Promise.all(promises);
 
   if (errors.length > 0) {
-    // Log errors so they can be seen in Metro console
+    // Log errors so they can be seen in the webview console
     console.warn('[fetchAllBalances] Errors:', errors.join('; '));
   }
 
-  return results as Record<CoinType, string>;
+  return results as Record<CoinType, string | null>;
 }

@@ -1,5 +1,6 @@
 import {CoinAPI, APIConfig} from '../types';
 import {CoinType, Transaction, GasEstimate} from '../../coins/types';
+import {fetchWithTimeout} from '../http';
 
 /**
  * Ethereum JSON-RPC + Etherscan API provider for ETH, USDT, USDC.
@@ -25,24 +26,31 @@ export class EthereumAPI implements CoinAPI {
   constructor(coin: CoinType, config?: Partial<APIConfig>) {
     this.coin = coin;
     this.rpcUrl = config?.baseUrl || 'https://ethereum-rpc.publicnode.com';
-    this.etherscanUrl = 'https://api.etherscan.io/api';
-    this.etherscanApiKey = config?.apiKey || ''; // Works without key at low rate
+    // Etherscan V2 endpoint. The old V1 (`/api`) is deprecated and now rejects
+    // every request with "deprecated V1 endpoint". V2 needs a `chainid` (added
+    // in etherscanCall) and a valid API key — the keyless tier is gone.
+    this.etherscanUrl = 'https://api.etherscan.io/v2/api';
+    this.etherscanApiKey = config?.apiKey || '';
     this.timeout = config?.timeout || 15000;
   }
 
   // --- JSON-RPC helper ---
 
   private async rpcCall(method: string, params: any[]): Promise<any> {
-    const resp = await fetch(this.rpcUrl, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method,
-        params,
-        id: Date.now(),
-      }),
-    });
+    const resp = await fetchWithTimeout(
+      this.rpcUrl,
+      {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method,
+          params,
+          id: Date.now(),
+        }),
+      },
+      this.timeout,
+    );
     const json = await resp.json();
     if (json.error) {
       throw new Error(`ETH RPC error: ${json.error.message}`);
@@ -53,15 +61,16 @@ export class EthereumAPI implements CoinAPI {
   // --- Etherscan helper ---
 
   private async etherscanCall(params: Record<string, string>): Promise<any> {
-    const qs = Object.entries(params)
+    // V2 routes all chains through one host, selected by chainid (1 = mainnet).
+    const allParams: Record<string, string> = {chainid: '1', ...params};
+    const qs = Object.entries(allParams)
       .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
       .join('&');
     let url = `${this.etherscanUrl}?${qs}`;
     if (this.etherscanApiKey) {
       url += `&apikey=${this.etherscanApiKey}`;
     }
-    const resp = await fetch(url, {
-    });
+    const resp = await fetchWithTimeout(url, {}, this.timeout);
     return resp.json();
   }
 
@@ -129,6 +138,13 @@ export class EthereumAPI implements CoinAPI {
 
     const json = await this.etherscanCall(params);
     if (json.status !== '1' || !json.result) {
+      // status '0' with a string result is an error (e.g. "Missing/Invalid API
+      // Key"); the genuine empty case is "No transactions found". Surface real
+      // errors so a misconfigured key isn't mistaken for an empty history.
+      const msg = typeof json.result === 'string' ? json.result : json.message;
+      if (msg && !/no transactions found/i.test(msg)) {
+        throw new Error(`Etherscan: ${msg}`);
+      }
       return [];
     }
 

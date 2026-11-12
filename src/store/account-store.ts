@@ -27,6 +27,9 @@ async function setupFchApiKeys(key: KeyEntry) {
     const commonApi = getFCHCommonApi();
     if (key.privateKey) {
       const privHex = bytesToHex(key.privateKey);
+      // Set the legacy client key first: it's local and must not depend on the
+      // network call below succeeding (serviceSearch needs it).
+      getFCHLegacyApi().setClientKey(privHex, key.addresses[CoinType.FCH] || '');
       // Timeout after 5 seconds — don't block login if FCH server is down
       await Promise.race([
         commonApi.init(privHex),
@@ -34,13 +37,10 @@ async function setupFchApiKeys(key: KeyEntry) {
           setTimeout(() => reject(new Error('FCH API timeout')), 5000),
         ),
       ]);
-      // Also set client key on legacy API so encrypted POST works for serviceSearch
-      const legacyApi = getFCHLegacyApi();
-      legacyApi.setClientKey(privHex, key.addresses[CoinType.FCH] || '');
     }
   } catch (e: any) {
     console.warn('[setupFchApiKeys] FCH API not available:', e.message);
-    // Login continues — FCH will show 0 balance, other coins still work
+    // Login continues. The FCH APIs retry getService on their next request.
   }
 }
 
@@ -135,10 +135,11 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     }
 
     const keys = keyManager.listKeys();
-    const activeKeyId = keys.length > 0 ? keys[0].id : null;
+    // Restore the key last used in the previous session (KeyManager loaded it from disk).
+    const activeKey = keyManager.getActiveKey();
+    const activeKeyId = activeKey?.id ?? null;
 
     // Set up FCH common API encryption keys BEFORE setting logged in
-    const activeKey = keys.find(k => k.id === activeKeyId);
     if (activeKey?.privateKey) {
       await setupFchApiKeys(activeKey);
     }
@@ -214,7 +215,10 @@ export const useAccountStore = create<AccountState>((set, get) => ({
   setActiveKey: (fchAddress: string) => {
     const {keyManager, keys} = get();
     if (keyManager) {
-      keyManager.setActiveKey(fchAddress);
+      // Persist the selection so it survives a relaunch (fire-and-forget).
+      keyManager
+        .setActiveKey(fchAddress)
+        .catch(e => console.warn('[setActiveKey] failed to persist:', e?.message));
       set({activeKeyId: fchAddress});
       const key = keys.find(k => k.id === fchAddress);
       if (key?.privateKey) {

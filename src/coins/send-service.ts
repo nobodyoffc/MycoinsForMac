@@ -48,11 +48,12 @@ export async function sendTransaction(params: SendParams): Promise<SendResult> {
   }
 }
 
-// Minimum fee rates per coin (sat/byte)
-// DOGE requires ~0.01 DOGE/KB minimum = 10 koinu/byte
-// BTC/BCH/FCH: 1 sat/byte is usually enough
+// Minimum (network relay floor) fee rates per coin, in sat/byte (koinu/byte for DOGE).
+// DOGE's min relay fee is ~0.01 DOGE/KB = 1,000,000 koinu / 1000 bytes = 1000 koinu/byte.
+// (The old value of 10 was 100x too low, producing TXs that no node would relay.)
+// BTC/BCH/FCH: 1 sat/byte is usually enough.
 const MIN_FEE_RATES: Partial<Record<CoinType, number>> = {
-  [CoinType.DOGE]: 10, // 0.01 DOGE per KB
+  [CoinType.DOGE]: 1000, // 0.01 DOGE per KB
   [CoinType.BTC]: 1,
   [CoinType.BCH]: 1,
   [CoinType.FCH]: 1,

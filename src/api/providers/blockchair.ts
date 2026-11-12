@@ -1,5 +1,6 @@
 import {CoinAPI, APIConfig} from '../types';
 import {CoinType, UTXO, Transaction, FeeEstimate} from '../../coins/types';
+import {fetchWithTimeout} from '../http';
 
 /**
  * Blockchair API provider for BTC, BCH, DOGE.
@@ -37,7 +38,7 @@ export class BlockchairAPI implements CoinAPI {
     if (this.config.apiKey) {
       url += (url.includes('?') ? '&' : '?') + `key=${this.config.apiKey}`;
     }
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url, {}, this.config.timeout);
     if (!resp.ok) {
       throw new Error(`Blockchair API error: ${resp.status} ${resp.statusText}`);
     }
@@ -75,13 +76,14 @@ export class BlockchairAPI implements CoinAPI {
   }
 
   async broadcastTransaction(rawHex: string): Promise<string> {
-    const resp = await fetch(
+    const resp = await fetchWithTimeout(
       `${this.baseUrl}/${this.chain}/push/transaction`,
       {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({data: rawHex}),
       },
+      this.config.timeout,
     );
     const json = await resp.json();
     if (json.data?.transaction_hash) {

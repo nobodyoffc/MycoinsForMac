@@ -35,6 +35,7 @@ export interface KeystoreFile {
   version: number;
   kdf?: KDF; // absent or 'sha256-legacy' for v1 files
   kdfParams?: KdfParams; // only present when kdf === 'argon2id'
+  activeKeyId?: string | null; // id of the key last used; restored on relaunch
   keys: EncryptedKeyEntry[];
 }
 
@@ -45,6 +46,7 @@ export interface KeystoreMeta {
 
 export interface KeystoreLoadResult {
   keys: KeyEntry[];
+  activeKeyId: string | null;
   meta: KeystoreMeta;
 }
 
@@ -109,12 +111,14 @@ export function createKeystoreFile(
   keys: KeyEntry[],
   symkey: Uint8Array,
   kdfParams: KdfParams,
+  activeKeyId: string | null = null,
 ): KeystoreFile {
   return {
     accountId,
     version: CURRENT_KEYSTORE_VERSION,
     kdf: 'argon2id',
     kdfParams,
+    activeKeyId,
     keys: keys.map(k => encryptKeyEntry(k, symkey)),
   };
 }
@@ -151,8 +155,15 @@ export class KeystoreManager {
     keys: KeyEntry[],
     symkey: Uint8Array,
     kdfParams: KdfParams,
+    activeKeyId: string | null = null,
   ): Promise<void> {
-    const keystore = createKeystoreFile(accountId, keys, symkey, kdfParams);
+    const keystore = createKeystoreFile(
+      accountId,
+      keys,
+      symkey,
+      kdfParams,
+      activeKeyId,
+    );
     const json = JSON.stringify(keystore, null, 2);
     await this.storage.write(this.keystorePath(accountId), json);
   }
@@ -169,7 +180,7 @@ export class KeystoreManager {
     }
     const meta = readMetaFromFile(file);
     const keys = file.keys.map(k => decryptKeyEntry(k, symkey));
-    return {keys, meta};
+    return {keys, meta, activeKeyId: file.activeKeyId ?? null};
   }
 
   async exists(accountId: string): Promise<boolean> {
