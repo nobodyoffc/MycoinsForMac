@@ -10,9 +10,11 @@
     so it sits at the same visual weight as native Dock icons.
   -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#372E7D"/>
-      <stop offset="1" stop-color="#1E1B5E"/>
+    <!-- bright blue, top to bottom; userSpaceOnUse so the "M" shares the
+         background's gradient at every height -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3BA4FF"/>
+      <stop offset="1" stop-color="#1673E6"/>
     </linearGradient>
     <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#EDAF2F"/>
@@ -39,7 +41,7 @@
       edges across rows 74..102 of the source, then mirrored about x=96.5.
       Stems x=72..81 and x=112..121; cap y=64, baseline y=115.
     -->
-    <path fill="#1E1B5E" d="
+    <path fill="url(#bg)" d="
       M 72,64
       L 86.84,64
       L 96.5,105.67
